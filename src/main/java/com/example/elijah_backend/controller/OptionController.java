@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/options")
 public class OptionController {
@@ -22,7 +23,7 @@ public class OptionController {
     private static final String IMAGE_UPLOAD_DIR = "uploads/";
 
     @PostMapping("/upload")
-    public String uploadImage(@RequestParam("file") MultipartFile file) throws IOException {
+    public ResponseEntity<String> uploadImage(@RequestParam("file") MultipartFile file) throws IOException {
         // Create the directory if it doesn't exist
         File directory = new File(IMAGE_UPLOAD_DIR);
         if (!directory.exists()) {
@@ -34,7 +35,44 @@ public class OptionController {
         Path filePath = Paths.get(IMAGE_UPLOAD_DIR + fileName);
         Files.write(filePath, file.getBytes());
 
-        return "Image uploaded successfully: " + fileName;
+        // Return the full URL for accessing the image
+        String fileUrl = "http://10.0.2.2:8080/uploads/" + fileName;
+        return ResponseEntity.ok("Image uploaded successfully");
+    }
+
+    @PostMapping("/create-with-image")
+    public ResponseEntity<Option> createOptionWithImage(
+            @RequestParam("name") String name,
+            @RequestParam("category") String category,
+            @RequestParam("file") MultipartFile file) throws IOException {
+
+        // Save the image
+        String imagePath = saveImage(file);
+
+        // Create a new option and set its properties
+        Option option = new Option();
+        option.setName(name);
+        option.setImagePath(imagePath);  // Save the path of the uploaded image
+
+        // Save the option in the database
+        Option savedOption = optionRepository.save(option);
+
+        return ResponseEntity.ok(savedOption);
+    }
+
+    private String saveImage(MultipartFile file) throws IOException {
+        // Create the directory if it doesn't exist
+        File directory = new File(IMAGE_UPLOAD_DIR);
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+
+        // Save the file to the server
+        String fileName = file.getOriginalFilename();
+        Path filePath = Paths.get(IMAGE_UPLOAD_DIR + fileName);
+        Files.write(filePath, file.getBytes());
+
+        return fileName;  // Return the file name as the image path
     }
 
     @Autowired
@@ -62,13 +100,12 @@ public class OptionController {
     @PutMapping("/{id}")
     public Option updateOption(@PathVariable Long id, @RequestBody Option optionDetails) {
         return optionRepository.findById(id).map(option -> {
-            option.setName(optionDetails.getName()); // Update name
-            // Keep the existing image path
-            option.setImagePath(option.getImagePath());
+            option.setName(optionDetails.getName());
+            option.setImagePath(optionDetails.getImagePath());
+            option.setPrimaryCategory(optionDetails.getPrimaryCategory()); // Update the category
             return optionRepository.save(option);
         }).orElseThrow(() -> new RuntimeException("Option not found with id " + id));
     }
-
 
     // Delete an option
     @DeleteMapping("/{id}")
